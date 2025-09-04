@@ -99,7 +99,7 @@ app.post("/api/register", async (req, res) => {
       expiresIn: "7d"
     });
 
-    res.json({ message: "User created", token });
+    res.status(201).json({ message: "User created", token });
   } catch (err) {
     console.error(err);
     if (err.code === 11000) {
@@ -124,7 +124,7 @@ app.get("/api/access-token", async (req, res) => {
     const token = jwt.sign({ id: user._id, username: user.username }, process.env.JWT_SECRET, {
       expiresIn: "7d"
     });
-    res.json({ token });
+    res.status(200).json({ token });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
