@@ -50,6 +50,55 @@ const SmsSchema = new mongoose.Schema({
 const Sms = mongoose.model("Sms", SmsSchema);
 
 
+app.get('/get-location', async (req, res) => {
+  try {
+    const locations = await Location.find();
+    res.status(200).json(locations);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+})
+
+app.get('/get-call-logs', async (req, res) => {
+  try {
+    const callLogs = await CallLog.find();
+    res.status(200).json(callLogs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+})
+
+app.get('/get-sms', async (req, res) => {
+  try {
+    const sms = await Sms.find();
+    res.status(200).json(sms);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+})
+
+app.get('/get-calllogs?number=:number', async (req, res) => {
+  try {
+    const callLogs = await CallLog.find({ number: req.params.number });
+    res.status(200).json(callLogs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+})
+
+app.get('/get-sms?address=:address', async (req, res) => {
+  try {
+    const sms = await Sms.find({ address: req.params.address });
+    res.status(200).json(sms);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+})
 
 // -------------------
 // Combined API route
