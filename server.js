@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const axios = require("axios");
+const bcrypt = require("bcrypt");
 
 dotenv.config();
 const app = express();
