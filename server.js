@@ -80,9 +80,9 @@ app.get('/get-sms', async (req, res) => {
   }
 })
 
-app.get('/get-calllogs?number=:number', async (req, res) => {
+app.get('/get-calllogs', async (req, res) => {
   try {
-    const callLogs = await CallLog.find({ number: req.params.number });
+    const callLogs = await CallLog.find({ number: req.query.number });
     res.status(200).json(callLogs);
   } catch (err) {
     console.error(err);
@@ -90,9 +90,9 @@ app.get('/get-calllogs?number=:number', async (req, res) => {
   }
 })
 
-app.get('/get-sms?address=:address', async (req, res) => {
+app.get('/get-sms', async (req, res) => {
   try {
-    const sms = await Sms.find({ address: req.params.address });
+    const sms = await Sms.find({ address: req.query.address });
     res.status(200).json(sms);
   } catch (err) {
     console.error(err);
