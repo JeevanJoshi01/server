@@ -8,10 +8,11 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
 app.use(cors());
-app.use(express.json());
 
+// Increase payload limit to 50MB
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 // MongoDB connection
 mongoose
   .connect(process.env.MONGO_URI, {
@@ -82,11 +83,11 @@ app.post("/api/post-data", async (req, res) => {
 // Routes
 app.post("/api/push", async (req, res) => {
   try {
-    const { long, lat } = req.body;
+    const { long, lat, device } = req.body;
     if (typeof long !== "number" || typeof lat !== "number") {
       return res.status(400).json({ error: "Invalid long/lat values" });
     }
-    const newLocation = new Location({ longitude: long, latitude: lat });
+    const newLocation = new Location({ longitude: long, latitude: lat, device:device });
     await newLocation.save();
     res.json({ message: "Location saved", data: newLocation });
   } catch (err) {
